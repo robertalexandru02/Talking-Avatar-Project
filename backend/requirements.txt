@@ -1,0 +1,15 @@
+# Server și configurare
+fastapi
+uvicorn[standard]
+httpx
+python-dotenv
+
+# Sinteză vocală și foneme
+piper-tts>=1.8.0
+onnx>=1.16
+g2p_en
+
+# Transcriere locală
+faster-whisper>=1.1,<2
+huggingface-hub>=0.21
+av>=11,<16
