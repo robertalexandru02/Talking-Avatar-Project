@@ -24,16 +24,54 @@ def run(command):
     subprocess.run([str(part) for part in command], cwd=ROOT, check=True)
 
 
+def install_step(command):
+    log_path = ROOT / 'artifacts/install.log'
+    log_path.parent.mkdir(exist_ok=True)
+    finished = threading.Event()
+    last_output = [time.monotonic()]
+    environment = dict(os.environ, PYTHONUNBUFFERED='1', PIP_NO_INPUT='1',
+                       PIP_DISABLE_PIP_VERSION_CHECK='1')
+    process = subprocess.Popen([str(part) for part in command], cwd=ROOT,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        encoding='utf-8', errors='replace', env=environment)
+    def report_wait():
+        while not finished.wait(15):
+            if process.poll() is None and time.monotonic() - last_output[0] >= 15:
+                print('Instalatorul este inca activ. Jurnal: artifacts/install.log', flush=True)
+    threading.Thread(target=report_wait, daemon=True).start()
+    try:
+        with log_path.open('a', encoding='utf-8') as log:
+            log.write('\n--- Etapa de instalare ---\n')
+            for line in process.stdout:
+                last_output[0] = time.monotonic()
+                print(line, end='', flush=True)
+                log.write(line); log.flush()
+        code = process.wait()
+        if code:
+            print('Etapa a esuat. Detalii in artifacts/install.log.', flush=True)
+            raise subprocess.CalledProcessError(code, command)
+    finally:
+        finished.set()
+        process.stdout.close()
+        stop_process(process)
+
+
 def prepare_environment():
     python = ENV / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     if not python.is_file():
         print('Creez mediul Python...', flush=True)
         venv.EnvBuilder(with_pip=True).create(ENV)
-    fingerprint = hashlib.sha256(REQUIREMENTS.read_bytes()).hexdigest()
+    fingerprint = hashlib.sha256(b'installer-v2\0' + REQUIREMENTS.read_bytes()).hexdigest()
     stamp = ENV / '.requirements.sha256'
     if not stamp.is_file() or stamp.read_text() != fingerprint:
         print('Instalez dependentele. Prima instalare poate dura cateva minute.', flush=True)
-        run([python, '-m', 'pip', 'install', '-r', REQUIREMENTS])
+        print('1/2 Actualizez pip, setuptools si wheel...', flush=True)
+        install_step([python, '-m', 'pip', 'install', '--upgrade', '--timeout', '60',
+                      '--retries', '2', 'pip', 'setuptools', 'wheel'])
+        print('2/2 Instalez pachetele laboratorului...', flush=True)
+        install_step([python, '-m', 'pip', 'install', '--timeout', '60',
+                      '--retries', '2', '-r', REQUIREMENTS])
+        print('Dependente instalate. Continui cu modelele...', flush=True)
         stamp.write_text(fingerprint)
     return python
 

@@ -31,6 +31,8 @@ Launcherul pregătește mediul Python, instalează dependențele, pornește Olla
 local dacă este necesar, descarcă modelele lipsă și deschide **http://localhost:8000**.
 Prima instalare descarcă mai mulți GB și poate dura; păstrează conexiunea la internet.
 Modelul microfonului afișează progresul descărcării și nu necesită cont sau token Hugging Face.
+Launcherul actualizează `pip`, `setuptools` și `wheel` înaintea dependențelor.
+Dacă instalarea nu avansează, detaliile sunt salvate în `artifacts/install.log`.
 La pornirile următoare, folosește același launcher: instalarea existentă este reutilizată.
 
 Păstrează terminalul deschis cât folosești laboratorul. **Ctrl+C** oprește serverul.

@@ -35,28 +35,38 @@ class LauncherTests(unittest.TestCase):
 
     def test_fresh_install_creates_environment_with_pip_before_installing(self):
         self.python.unlink()
-        with patch.object(start.venv,'EnvBuilder') as builder,patch.object(start,'run') as run:
+        with patch.object(start.venv,'EnvBuilder') as builder,patch.object(start,'install_step') as run:
             builder.return_value.create.side_effect=lambda folder:self.python.touch()
             self.assertEqual(start.prepare_environment(),self.python)
         builder.assert_called_once_with(with_pip=True)
         builder.return_value.create.assert_called_once_with(self.env)
-        self.assertEqual(run.call_args.args[0][:4],[self.python,'-m','pip','install'])
+        self.assertEqual(run.call_args_list[0].args[0][-3:],['pip','setuptools','wheel'])
+        self.assertIn('-r',run.call_args_list[1].args[0])
+
+    def test_install_output_is_logged_and_failed_steps_are_reported(self):
+        start.install_step([sys.executable,'-u','-c',"print('setup output')"])
+        with self.assertRaises(subprocess.CalledProcessError) as failure:
+            start.install_step([sys.executable,'-u','-c',"import sys;print('failure detail',file=sys.stderr);sys.exit(3)"])
+        self.assertEqual(failure.exception.returncode,3)
+        log=(self.root/'artifacts/install.log').read_text(encoding='utf-8')
+        self.assertIn('setup output',log)
+        self.assertIn('failure detail',log)
 
     def test_dependencies_install_once_and_refresh_after_requirements_change(self):
-        with patch.object(start,'run') as run:
+        with patch.object(start,'install_step') as run:
             start.prepare_environment();start.prepare_environment()
-            self.assertEqual(run.call_count,1)
+            self.assertEqual(run.call_count,2)
             self.requirements.write_text('fastapi\nhttpx\n')
             start.prepare_environment()
-            self.assertEqual(run.call_count,2)
+            self.assertEqual(run.call_count,4)
 
     def test_failed_dependency_install_is_retried(self):
-        with patch.object(start,'run',side_effect=subprocess.CalledProcessError(1,'pip')):
+        with patch.object(start,'install_step',side_effect=subprocess.CalledProcessError(1,'pip')):
             with self.assertRaises(subprocess.CalledProcessError):start.prepare_environment()
         self.assertFalse((self.env/'.requirements.sha256').exists())
-        with patch.object(start,'run') as run:
+        with patch.object(start,'install_step') as run:
             start.prepare_environment()
-            run.assert_called_once()
+            self.assertEqual(run.call_count,2)
 
     def test_existing_models_do_not_trigger_model_downloads(self):
         self.installed_whisper()
