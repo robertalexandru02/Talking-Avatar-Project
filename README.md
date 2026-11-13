@@ -33,6 +33,10 @@ Prima instalare descarcă mai mulți GB și poate dura; păstrează conexiunea l
 Modelul microfonului afișează progresul descărcării și nu necesită cont sau token Hugging Face.
 Launcherul actualizează `pip`, `setuptools` și `wheel` înaintea dependențelor.
 Dacă instalarea nu avansează, detaliile sunt salvate în `artifacts/install.log`.
+În perioadele fără mesaje, terminalul afișează etapa și timpul scurs la fiecare
+5 secunde. `[OK]` confirmă finalizarea, iar `[EROARE]` indică oprirea etapei.
+Indicatorul „proces activ” arată că procesul rulează, fără a garanta că avansează;
+procentele sunt afișate numai când sunt furnizate de descărcare.
 La pornirile următoare, folosește același launcher: instalarea existentă este reutilizată.
 
 Păstrează terminalul deschis cât folosești laboratorul. **Ctrl+C** oprește serverul.

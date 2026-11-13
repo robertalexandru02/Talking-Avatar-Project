@@ -21,24 +21,34 @@ URL = 'http://localhost:8000'
 
 
 def run(command):
-    subprocess.run([str(part) for part in command], cwd=ROOT, check=True)
+    script = Path(str(command[-1])).stem
+    label = {'download_voices':'Descarcare voci', 'download_asr':'Model microfon'}.get(script, script)
+    install_step(command, label=label)
 
 
-def install_step(command):
+def install_step(command, label='Instalare', heartbeat_interval=5):
     log_path = ROOT / 'artifacts/install.log'
     log_path.parent.mkdir(exist_ok=True)
     finished = threading.Event()
     last_output = [time.monotonic()]
+    started = last_output[0]
+    warned = False
+    def elapsed():
+        seconds = int(time.monotonic() - started)
+        return f'{seconds // 60:02d}:{seconds % 60:02d}'
     environment = dict(os.environ, PYTHONUNBUFFERED='1', PIP_NO_INPUT='1',
-                       PIP_DISABLE_PIP_VERSION_CHECK='1')
+                       PYTHONIOENCODING='utf-8', PIP_DISABLE_PIP_VERSION_CHECK='1')
     process = subprocess.Popen([str(part) for part in command], cwd=ROOT,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         encoding='utf-8', errors='replace', env=environment)
     def report_wait():
-        while not finished.wait(15):
-            if process.poll() is None and time.monotonic() - last_output[0] >= 15:
-                print('Instalatorul este inca activ. Jurnal: artifacts/install.log', flush=True)
-    threading.Thread(target=report_wait, daemon=True).start()
+        tick = 0
+        while not finished.wait(heartbeat_interval):
+            if process.poll() is None and time.monotonic() - last_output[0] >= heartbeat_interval:
+                indicator = '|/-\\'[tick % 4]; tick += 1
+                print(f'[{indicator}] {label} | {elapsed()} | proces activ, astept mesaje noi...', flush=True)
+    reporter = threading.Thread(target=report_wait, daemon=True)
+    reporter.start()
     try:
         with log_path.open('a', encoding='utf-8') as log:
             log.write('\n--- Etapa de instalare ---\n')
@@ -46,12 +56,17 @@ def install_step(command):
                 last_output[0] = time.monotonic()
                 print(line, end='', flush=True)
                 log.write(line); log.flush()
+                if not warned and ('warning:' in line.lower() or 'deprecation:' in line.lower()):
+                    warned = True
+                    print(f'[INFO] {label}: avertisment in jurnal; astept rezultatul procesului.', flush=True)
         code = process.wait()
         if code:
-            print('Etapa a esuat. Detalii in artifacts/install.log.', flush=True)
+            print(f'[EROARE] {label} | {elapsed()} | cod {code}. Detalii: artifacts/install.log', flush=True)
             raise subprocess.CalledProcessError(code, command)
+        print(f'[OK] {label} | terminat in {elapsed()}', flush=True)
     finally:
         finished.set()
+        reporter.join(timeout=1)
         process.stdout.close()
         stop_process(process)
 
@@ -67,10 +82,10 @@ def prepare_environment():
         print('Instalez dependentele. Prima instalare poate dura cateva minute.', flush=True)
         print('1/2 Actualizez pip, setuptools si wheel...', flush=True)
         install_step([python, '-m', 'pip', 'install', '--upgrade', '--timeout', '60',
-                      '--retries', '2', 'pip', 'setuptools', 'wheel'])
+                      '--retries', '2', 'pip', 'setuptools', 'wheel'], label='1/2 Unelte de instalare')
         print('2/2 Instalez pachetele laboratorului...', flush=True)
         install_step([python, '-m', 'pip', 'install', '--timeout', '60',
-                      '--retries', '2', '-r', REQUIREMENTS])
+                      '--retries', '2', '-r', REQUIREMENTS], label='2/2 Dependente laborator')
         print('Dependente instalate. Continui cu modelele...', flush=True)
         stamp.write_text(fingerprint)
     return python

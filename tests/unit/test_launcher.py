@@ -1,4 +1,5 @@
 import io
+import contextlib
 import os
 from pathlib import Path
 import subprocess
@@ -51,6 +52,19 @@ class LauncherTests(unittest.TestCase):
         log=(self.root/'artifacts/install.log').read_text(encoding='utf-8')
         self.assertIn('setup output',log)
         self.assertIn('failure detail',log)
+
+    def test_warning_followed_by_silence_keeps_status_visible_until_success(self):
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            start.install_step([sys.executable,'-u','-c',
+                "import time;print('WARNING: old installer',flush=True);time.sleep(.15)"],
+                label='Dependente',heartbeat_interval=.02)
+        text=output.getvalue()
+        self.assertIn('avertisment in jurnal',text)
+        self.assertIn('proces activ',text)
+        self.assertIn('[OK] Dependente',text)
+        self.assertNotIn('%',text)
+        self.assertNotIn('[EROARE]',text)
 
     def test_dependencies_install_once_and_refresh_after_requirements_change(self):
         with patch.object(start,'install_step') as run:
